@@ -1,5 +1,5 @@
-/*	$OpenBSD: err.c,v 1.2 1996/04/21 23:39:17 deraadt Exp $	*/
-/*	$NetBSD: err.c,v 1.13 1996/04/15 23:45:29 jtc Exp $	*/
+/*	$OpenBSD: warn.c,v 1.1 1996/04/21 23:39:37 deraadt Exp $ */
+/*	$NetBSD: warn.c,v 1.1 1996/04/15 23:45:42 jtc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)err.c	8.1 (Berkeley) 6/4/93";
 #else
-static char rcsid[] = "$NetBSD: err.c,v 1.13 1996/04/15 23:45:29 jtc Exp $";
+static char rcsid[] = "$NetBSD: warn.c,v 1.1 1996/04/15 23:45:42 jtc Exp $";
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,11 +50,11 @@ static char rcsid[] = "$NetBSD: err.c,v 1.13 1996/04/15 23:45:29 jtc Exp $";
 #include <varargs.h>
 #endif
 
-__dead void
+void
 #ifdef __STDC__
-_err(int eval, const char *fmt, ...)
+_warn(const char *fmt, ...)
 #else
-_err(va_alist)
+_warn(va_alist)
 	va_dcl
 #endif
 {
@@ -62,13 +62,11 @@ _err(va_alist)
 #if __STDC__
 	va_start(ap, fmt);
 #else
-	int eval;
 	const char *fmt;
 
 	va_start(ap);
-	eval = va_arg(ap, int);
 	fmt = va_arg(ap, const char *);
 #endif
-	_verr(eval, fmt, ap);
+	_vwarn(fmt, ap);
 	va_end(ap);
 }
