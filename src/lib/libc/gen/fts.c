@@ -1,4 +1,4 @@
-/*	$OpenBSD: fts.c,v 1.24 2000/08/24 17:04:12 deraadt Exp $	*/
+/*	$OpenBSD: fts.c,v 1.24.4.1 2001/05/31 02:20:29 jason Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-static char rcsid[] = "$OpenBSD: fts.c,v 1.24 2000/08/24 17:04:12 deraadt Exp $";
+static char rcsid[] = "$OpenBSD: fts.c,v 1.24.4.1 2001/05/31 02:20:29 jason Exp $";
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -271,6 +271,7 @@ fts_read(sp)
 	register FTS *sp;
 {
 	register FTSENT *p, *tmp;
+	struct stat sb;
 	register int instr;
 	register char *t;
 	int saved_errno;
@@ -457,8 +458,14 @@ name:		t = sp->fts_path + NAPPEND(p->fts_parent);
 			return (NULL);
 		}
 		(void)close(p->fts_symfd);
-	} else if (!(p->fts_flags & FTS_DONTCHDIR)) {
-		if (CHDIR(sp, "..")) {
+	} else if (!(p->fts_flags & FTS_DONTCHDIR) && !ISSET(FTS_NOCHDIR)) {
+		if (chdir("..") || stat(".", &sb)) {
+			SET(FTS_STOP);
+			return (NULL);
+		}
+		if (sb.st_ino != p->fts_parent->fts_ino ||
+		    sb.st_dev != p->fts_parent->fts_dev) {
+			errno = ENOENT;
 			SET(FTS_STOP);
 			return (NULL);
 		}
