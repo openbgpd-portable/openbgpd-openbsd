@@ -1,4 +1,4 @@
-.\"	$OpenBSD: sysctl.3,v 1.100 2003/03/17 09:52:20 jmc Exp $
+.\"	$OpenBSD: sysctl.3,v 1.100.2.1 2004/03/03 08:40:07 brad Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -869,6 +869,7 @@ The currently defined protocols and names are:
 .It tcp	keepintvl	integer	yes
 .It tcp	slowhz	integer	no
 .It tcp	baddynamic	array	yes
+.It tcp	reasslimit	integer yes
 .It tcp	recvspace	integer	yes
 .It tcp	sendspace	integer	yes
 .It tcp	sack	integer	yes
@@ -1112,6 +1113,10 @@ in seconds.)
 Returns the default
 .Tn TCP
 send buffer size.
+.It Li tcp.reasslimit
+The maximum number of out-of-order
+.Tn TCP
+segments the system will store for reassembly.
 .It Li tcp.recvspace
 Returns the default
 .Tn TCP
