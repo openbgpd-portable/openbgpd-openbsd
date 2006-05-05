@@ -1,4 +1,4 @@
-/*	$OpenBSD: kroute.c,v 1.144 2006/02/23 15:25:18 claudio Exp $ */
+/*	$OpenBSD: kroute.c,v 1.144.2.1 2006/05/05 03:04:07 brad Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -2114,21 +2114,23 @@ dispatch_rtmsg(void)
 	lim = buf + n;
 	for (next = buf; next < lim; next += rtm->rtm_msglen) {
 		rtm = (struct rt_msghdr *)next;
-		sa = (struct sockaddr *)(rtm + 1);
-		get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
-
-		if (rtm->rtm_pid == kr_state.pid)	/* cause by us */
-			continue;
-
-		if (rtm->rtm_errno)			/* failed attempts... */
-			continue;
 
 		switch (rtm->rtm_type) {
 		case RTM_ADD:
 		case RTM_CHANGE:
 		case RTM_DELETE:
+			sa = (struct sockaddr *)(rtm + 1);
+			get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
+
+			if (rtm->rtm_pid == kr_state.pid)	/* cause by us */
+				continue;
+
+			if (rtm->rtm_errno)			/* failed attempts... */
+				continue;
+
 			if (rtm->rtm_flags & RTF_LLINFO)	/* arp cache */
 				continue;
+
 			if (dispatch_rtmsg_addr(rtm, rti_info) == -1)
 				return (-1);
 			break;
