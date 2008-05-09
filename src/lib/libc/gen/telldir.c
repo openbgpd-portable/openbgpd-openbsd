@@ -1,4 +1,4 @@
-/*	$OpenBSD: telldir.c,v 1.10 2007/06/05 18:11:48 kurt Exp $ */
+/*	$OpenBSD: telldir.c,v 1.10.2.1 2008/05/09 13:03:20 henning Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.

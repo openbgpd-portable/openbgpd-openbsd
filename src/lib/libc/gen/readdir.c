@@ -1,4 +1,4 @@
-/*	$OpenBSD: readdir.c,v 1.12 2007/06/05 18:11:48 kurt Exp $ */
+/*	$OpenBSD: readdir.c,v 1.12.2.1 2008/05/09 13:03:20 henning Exp $ */
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,31 +37,40 @@
 /*
  * get next entry in a directory.
  */
-struct dirent *
-_readdir_unlocked(DIR *dirp)
+int
+_readdir_unlocked(DIR *dirp, struct dirent **result, int skipdeleted)
 {
 	struct dirent *dp;
 
+	*result = NULL;
 	for (;;) {
-		if (dirp->dd_loc >= dirp->dd_size) {
+		if (dirp->dd_loc >= dirp->dd_size)
 			dirp->dd_loc = 0;
-		}
 		if (dirp->dd_loc == 0) {
 			dirp->dd_size = getdirentries(dirp->dd_fd,
 			    dirp->dd_buf, dirp->dd_len, &dirp->dd_seek);
-			if (dirp->dd_size <= 0)
-				return (NULL);
+			if (dirp->dd_size == 0)
+				return (0);
+			if (dirp->dd_size < 0)
+				return (-1);
 		}
 		dp = (struct dirent *)(dirp->dd_buf + dirp->dd_loc);
 		if ((long)dp & 03)	/* bogus pointer check */
-			return (NULL);
+			return (-1);
 		if (dp->d_reclen <= 0 ||
 		    dp->d_reclen > dirp->dd_len + 1 - dirp->dd_loc)
-			return (NULL);
+			return (-1);
 		dirp->dd_loc += dp->d_reclen;
-		if (dp->d_ino == 0)
+		/*
+		 * When called from seekdir(), we let it decide on
+		 * the end condition to avoid overshooting: the next
+		 * readdir call should produce the next non-deleted entry,
+		 * and we already advanced dd_loc.
+		 */
+		if (dp->d_ino == 0 && skipdeleted)
 			continue;
-		return (dp);
+		*result = dp;
+		return (0);
 	}
 }
 
@@ -71,7 +80,7 @@ readdir(DIR *dirp)
 	struct dirent *dp;
 
 	_MUTEX_LOCK(&dirp->dd_lock);
-	dp = _readdir_unlocked(dirp);
+	_readdir_unlocked(dirp, &dp, 1);
 	_MUTEX_UNLOCK(&dirp->dd_lock);
 
 	return (dp);
@@ -83,13 +92,13 @@ readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
 	struct dirent *dp;
 
 	_MUTEX_LOCK(&dirp->dd_lock);
-	dp = _readdir_unlocked(dirp);
-	if (dp == NULL && errno != 0) {
+	if (_readdir_unlocked(dirp, &dp, 1) != 0) {
 		_MUTEX_UNLOCK(&dirp->dd_lock);
 		return errno;
 	}
-	if (dp != NULL) 
-		memcpy(entry, dp, sizeof (struct dirent) - MAXNAMLEN + dp->d_namlen);
+	if (dp != NULL)
+		memcpy(entry, dp,
+		    sizeof (struct dirent) - MAXNAMLEN + dp->d_namlen);
 	_MUTEX_UNLOCK(&dirp->dd_lock);
 	if (dp != NULL)
 		*result = entry;
