@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.232 2008/06/15 10:03:46 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.232.2.1 2009/01/30 22:37:34 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -797,8 +797,10 @@ rde_update_dispatch(struct imsg *imsg)
 		/*
 		 * if either ATTR_NEW_AGGREGATOR or ATTR_NEW_ASPATH is present
 		 * try to fixup the attributes.
+		 * XXX do not fixup if F_ATTR_LOOP is set.
 		 */
-		if (asp->flags & F_ATTR_AS4BYTE_NEW)
+		if (asp->flags & F_ATTR_AS4BYTE_NEW &&
+		    !(asp->flags & F_ATTR_LOOP))
 			rde_as4byte_fixup(peer, asp);
 
 		/* enforce remote AS if requested */
@@ -1168,14 +1170,14 @@ bad_len:
 		if (!CHECK_FLAGS(flags, ATTR_WELL_KNOWN, 0)) {
 bad_flags:
 			rde_update_err(peer, ERR_UPDATE, ERR_UPD_ATTRFLAGS,
-			    op, attr_len);
+			    op, len);
 			return (-1);
 		}
 
 		UPD_READ(&a->origin, p, plen, 1);
 		if (a->origin > ORIGIN_INCOMPLETE) {
 			rde_update_err(peer, ERR_UPDATE, ERR_UPD_ORIGIN,
-			    op, attr_len);
+			    op, len);
 			return (-1);
 		}
 		if (a->flags & F_ATTR_ORIGIN)
@@ -1222,7 +1224,7 @@ bad_flags:
 		tmp32 = ntohl(nexthop.v4.s_addr);
 		if (IN_MULTICAST(tmp32) || IN_BADCLASS(tmp32)) {
 			rde_update_err(peer, ERR_UPDATE, ERR_UPD_NETWORK,
-			    op, attr_len);
+			    op, len);
 			return (-1);
 		}
 		a->nexthop = nexthop_get(&nexthop);
@@ -1347,10 +1349,16 @@ bad_flags:
 		    ATTR_PARTIAL))
 			goto bad_flags;
 		if (aspath_verify(p, attr_len, 1) != 0) {
-			/* XXX draft does not specify how to handle errors */
-			rde_update_err(peer, ERR_UPDATE, ERR_UPD_ASPATH,
-			    NULL, 0);
-			return (-1);
+			/*
+			 * XXX RFC does not specify how to handle errors.
+			 * XXX Instead of dropping the session because of a
+			 * XXX bad path just mark the full update as not
+			 * XXX loop-free the update is no longer eligible and
+			 * XXX will not be considered for routing or
+			 * XXX redistribution. Something better is needed.
+			 */
+			a->flags |= F_ATTR_LOOP;
+			goto optattr;
 		}
 		a->flags |= F_ATTR_AS4BYTE_NEW;
 		goto optattr;
