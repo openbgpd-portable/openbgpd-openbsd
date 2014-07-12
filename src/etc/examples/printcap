@@ -1,0 +1,7 @@
+#	$OpenBSD: printcap,v 1.1 2014/07/12 03:52:39 deraadt Exp $
+
+#lp|local line printer:\
+#	:lp=/dev/lp:sd=/var/spool/output:lf=/var/log/lpd-errs:
+
+#rp|remote line printer:\
+#	:lp=:rm=printhost:rp=lp:sd=/var/spool/output:lf=/var/log/lpd-errs:
