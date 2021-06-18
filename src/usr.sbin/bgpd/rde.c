@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.517 2021/04/16 06:20:29 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.517.2.1 2021/06/18 17:55:22 benno Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -2941,10 +2941,13 @@ rde_generate_updates(struct rib *rib, struct prefix *new, struct prefix *old,
 	}
 }
 
+/* flush Adj-RIB-Out by withdrawing all prefixes */
 static void
 rde_up_flush_upcall(struct prefix *p, void *ptr)
 {
-	up_generate_updates(out_rules, prefix_peer(p), NULL, p);
+	struct rde_peer *peer = ptr;
+
+	up_generate_updates(out_rules, peer, NULL, p);
 }
 
 u_char	queue_buf[4096];
@@ -3299,7 +3302,7 @@ rde_reload_done(void)
 			peer->reconf_rib = 1;
 			softreconfig++;
 			if (prefix_dump_new(peer, AID_UNSPEC,
-			    RDE_RUNNER_ROUNDS, NULL, rde_up_flush_upcall,
+			    RDE_RUNNER_ROUNDS, peer, rde_up_flush_upcall,
 			    rde_softreconfig_in_done, NULL) == -1)
 				fatal("%s: prefix_dump_new", __func__);
 			log_peer_info(&peer->conf, "flushing Adj-RIB-Out");
@@ -3551,15 +3554,34 @@ rde_softreconfig_out(struct rib_entry *re, void *bula)
 {
 	struct prefix		*p = re->active;
 	struct rde_peer		*peer;
+	u_int8_t		 aid = re->prefix->aid;
 
 	if (p == NULL)
 		/* no valid path for prefix */
 		return;
 
 	LIST_FOREACH(peer, &peerlist, peer_l) {
-		if (peer->loc_rib_id == re->rib_id && peer->reconf_out)
-			/* Regenerate all updates. */
-			up_generate_updates(out_rules, peer, p, p);
+		/* skip ourself */
+		if (peer == peerself)
+			continue;
+		if (peer->state != PEER_UP)
+			continue;
+		/* skip peers using a different rib */
+		if (peer->loc_rib_id != p->re->rib_id)
+			continue;
+		/* check if peer actually supports the address family */
+		if (peer->capa.mp[aid] == 0)
+			continue;
+		/* skip peers with special export types */
+		if (peer->conf.export_type == EXPORT_NONE ||
+		    peer->conf.export_type == EXPORT_DEFAULT_ROUTE)
+			continue;
+		/* skip peers which don't need to reconfigure */
+		if (peer->reconf_out == 0)
+			continue;
+
+		/* Regenerate all updates. */
+		up_generate_updates(out_rules, peer, p, p);
 	}
 }
 
