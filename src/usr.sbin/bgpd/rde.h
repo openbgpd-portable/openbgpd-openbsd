@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.h,v 1.251 2022/03/22 10:53:08 claudio Exp $ */
+/*	$OpenBSD: rde.h,v 1.251.2.1 2022/08/01 11:02:16 tb Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Claudio Jeker <claudio@openbsd.org> and
@@ -352,6 +352,8 @@ struct prefix {
 #define	NEXTHOP_REJECT		0x02
 #define	NEXTHOP_BLACKHOLE	0x04
 #define	NEXTHOP_NOMODIFY	0x08
+#define	NEXTHOP_MASK		0x0f
+#define	NEXTHOP_VALID		0x80
 
 struct filterstate {
 	struct rde_aspath	 aspath;
@@ -504,6 +506,8 @@ int		 prefix_eligible(struct prefix *);
 struct prefix	*prefix_best(struct rib_entry *);
 void		 prefix_evaluate(struct rib_entry *, struct prefix *,
 		     struct prefix *);
+void		 prefix_evaluate_nexthop(struct prefix *, enum nexthop_state,
+		     enum nexthop_state);
 
 /* rde_filter.c */
 void	rde_apply_set(struct filter_set_head *, struct rde_peer *,
@@ -643,7 +647,13 @@ prefix_nexthop(struct prefix *p)
 static inline uint8_t
 prefix_nhflags(struct prefix *p)
 {
-	return (p->nhflags);
+	return (p->nhflags & NEXTHOP_MASK);
+}
+
+static inline int
+prefix_nhvalid(struct prefix *p)
+{
+	return ((p->nhflags & NEXTHOP_VALID) != 0);
 }
 
 static inline uint8_t
