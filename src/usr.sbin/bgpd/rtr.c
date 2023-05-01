@@ -1,4 +1,4 @@
-/*	$OpenBSD: rtr.c,v 1.12 2023/03/09 17:21:21 claudio Exp $ */
+/*	$OpenBSD: rtr.c,v 1.12.4.1 2023/05/01 05:13:59 tb Exp $ */
 
 /*
  * Copyright (c) 2020 Claudio Jeker <claudio@openbsd.org>
@@ -491,10 +491,15 @@ static size_t
 rtr_aspa_set_prep(struct aspa_set *aspa)
 {
 	uint32_t i, mask = 0;
+	uint8_t *tas_aid;
 	int needafi = 0;
 	size_t s;
 
 	s = aspa->num * sizeof(uint32_t);
+
+	if ((tas_aid = malloc(TAS_AID_SIZE(aspa->num))) == NULL)
+		fatal("tas_aid alloc");
+
 	for (i = 0; i < aspa->num; i++) {
 		switch (aspa->tas_aid[i]) {
 		case AID_INET:
@@ -510,19 +515,23 @@ rtr_aspa_set_prep(struct aspa_set *aspa)
 			break;
 		}
 		if (i % 16 == 15) {
-			memcpy(aspa->tas_aid + (i / 16) * sizeof(mask), &mask,
+			memcpy(tas_aid + (i / 16) * sizeof(mask), &mask,
 			    sizeof(mask));
 			mask = 0;
 		}
 	}
 
+	free(aspa->tas_aid);
+	aspa->tas_aid = NULL;
+
 	if (!needafi) {
-		free(aspa->tas_aid);
-		aspa->tas_aid = NULL;
+		free(tas_aid);
 	} else {
-		memcpy(aspa->tas_aid + (aspa->num / 16) * sizeof(mask), &mask,
-		    sizeof(mask));
-		s += (aspa->num + 15) / 16;
+		if (aspa->num % 16 != 0)
+			memcpy(tas_aid + (aspa->num / 16) * sizeof(mask),
+			    &mask, sizeof(mask));
+		aspa->tas_aid = tas_aid;
+		s += TAS_AID_SIZE(aspa->num);
 	}
 
 	return s;
@@ -578,8 +587,8 @@ rtr_recalc(void)
 		imsg_compose(ibuf_rde, IMSG_RECONF_ASPA_TAS, 0, 0, -1,
 		    aspa->tas, aspa->num * sizeof(*aspa->tas));
 		if (aspa->tas_aid)
-			imsg_compose(ibuf_rde, IMSG_RECONF_ASPA_TAS, 0, 0, -1,
-			    aspa->tas_aid, (aspa->num + 15) / 16);
+			imsg_compose(ibuf_rde, IMSG_RECONF_ASPA_TAS_AID, 0, 0,
+			    -1, aspa->tas_aid, TAS_AID_SIZE(aspa->num));
 		imsg_compose(ibuf_rde, IMSG_RECONF_ASPA_DONE, 0, 0, -1,
 		    NULL, 0);
 	}
