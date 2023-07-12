@@ -1,4 +1,4 @@
-/*	$OpenBSD: kroute.c,v 1.300 2022/09/21 21:12:03 claudio Exp $ */
+/*	$OpenBSD: kroute.c,v 1.300.2.1 2023/07/12 12:48:18 tb Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -1856,7 +1856,7 @@ kroute6_remove(struct ktable *kt, struct kroute_full *kf, int any)
 	}
 
 	/* check whether a nexthop depends on this kroute */
-	if (kr->flags & F_NEXTHOP) {
+	if (krm->flags & F_NEXTHOP) {
 		RB_FOREACH(n, knexthop_tree, KT2KNT(kt)) {
 			if (n->kroute == krm)
 				knexthop_validate(kt, n);
