@@ -1,4 +1,4 @@
-/*	$OpenBSD: session.c,v 1.442 2023/03/09 13:12:19 claudio Exp $ */
+/*	$OpenBSD: session.c,v 1.442.4.1 2023/07/12 12:47:41 tb Exp $ */
 
 /*
  * Copyright (c) 2003, 2004, 2005 Henning Brauer <henning@openbsd.org>
@@ -2003,6 +2003,8 @@ session_process_msg(struct peer *p)
 		}
 	}
 
+	if (p->rbuf == NULL)
+		return;
 	if (rpos < av) {
 		left = av - rpos;
 		memmove(&p->rbuf->buf, p->rbuf->buf + rpos, left);
