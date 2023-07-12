@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.597.4.1 2023/05/01 05:13:59 tb Exp $ */
+/*	$OpenBSD: rde.c,v 1.597.4.2 2023/07/12 12:41:43 tb Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -1995,7 +1995,7 @@ bad_flags:
 			goto bad_flags;
 		if (peer->conf.ebgp) {
 			/* ignore local-pref attr on non ibgp peers */
-			plen += 4;
+			plen += attr_len;
 			break;
 		}
 		if (a->flags & F_ATTR_LOCALPREF)
@@ -2019,7 +2019,7 @@ bad_flags:
 			 * RFC 7606
 			 */
 			log_peer_warnx(&peer->conf, "bad AGGREGATOR, "
-			    "partial attribute ignored");
+			    "attribute discarded");
 			plen += attr_len;
 			break;
 		}
@@ -2067,7 +2067,6 @@ bad_flags:
 			a->flags |= F_ATTR_PARSE_ERR;
 			log_peer_warnx(&peer->conf, "bad COMMUNITIES, "
 			    "path invalidated and prefix withdrawn");
-			break;
 		}
 		plen += attr_len;
 		break;
@@ -2084,7 +2083,6 @@ bad_flags:
 			a->flags |= F_ATTR_PARSE_ERR;
 			log_peer_warnx(&peer->conf, "bad LARGE COMMUNITIES, "
 			    "path invalidated and prefix withdrawn");
-			break;
 		}
 		plen += attr_len;
 		break;
@@ -2101,7 +2099,6 @@ bad_flags:
 			a->flags |= F_ATTR_PARSE_ERR;
 			log_peer_warnx(&peer->conf, "bad EXT_COMMUNITIES, "
 			    "path invalidated and prefix withdrawn");
-			break;
 		}
 		plen += attr_len;
 		break;
@@ -2148,10 +2145,8 @@ bad_flags:
 	case ATTR_AS4_AGGREGATOR:
 		if (attr_len != 8) {
 			/* see ATTR_AGGREGATOR ... */
-			if ((flags & ATTR_PARTIAL) == 0)
-				goto bad_len;
 			log_peer_warnx(&peer->conf, "bad AS4_AGGREGATOR, "
-			    "partial attribute ignored");
+			    "attribute discarded");
 			plen += attr_len;
 			break;
 		}
@@ -2187,6 +2182,7 @@ bad_flags:
 			a->flags |= F_ATTR_PARSE_ERR;
 			log_peer_warnx(&peer->conf, "bad OTC, "
 			    "path invalidated and prefix withdrawn");
+			plen += attr_len;
 			break;
 		}
 		if (!CHECK_FLAGS(flags, ATTR_OPTIONAL|ATTR_TRANSITIVE,
