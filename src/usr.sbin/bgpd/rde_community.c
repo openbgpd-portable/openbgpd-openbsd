@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde_community.c,v 1.24 2026/03/17 09:29:29 claudio Exp $ */
+/*	$OpenBSD: rde_community.c,v 1.25 2026/04/16 19:06:45 claudio Exp $ */
 
 /*
  * Copyright (c) 2019 Claudio Jeker <claudio@openbsd.org>
@@ -278,6 +278,9 @@ struct rde_peer *peer)
 	struct community test, mask;
 	int l;
 
+	if (comm->nentries == 0)
+		return 0;
+
 	if (fc->flags >> 8 == 0) {
 		/* fast path */
 		return (bsearch(fc, comm->communities, comm->nentries,
@@ -385,6 +388,9 @@ community_delete(struct rde_community *comm, const struct community *fc,
 	struct community *match;
 	int l = 0;
 
+	if (comm->nentries == 0)
+		return;
+
 	if (fc->flags >> 8 == 0) {
 		/* fast path */
 		match = bsearch(fc, comm->communities, comm->nentries,
@@ -397,7 +403,6 @@ community_delete(struct rde_community *comm, const struct community *fc,
 		    (char *)(match + 1));
 		comm->nentries--;
 		comm->flags |= PARTIAL_DIRTY;
-		return;
 	} else {
 		if (fc2c(fc, peer, &test, &mask) == -1)
 			return;
@@ -643,8 +648,9 @@ communities_calc_hash(struct rde_community *comm)
 	if (comm->flags & PARTIAL_DIRTY) {
 		comm->flags &= ~PARTIAL_DIRTY;
 		SipHash24_Init(&ctx, &commkey);
-		SipHash24_Update(&ctx, comm->communities,
-		    comm->nentries * sizeof(struct community));
+		if (comm->nentries != 0)
+			SipHash24_Update(&ctx, comm->communities,
+			    comm->nentries * sizeof(struct community));
 		SipHash24_Update(&ctx, &comm->flags, sizeof(comm->flags));
 		comm->hash = SipHash24_End(&ctx);
 	}
@@ -730,6 +736,8 @@ communities_equal(const struct rde_community *a, const struct rde_community *b)
 		return 0;
 	if (a->flags != b->flags)
 		return 0;
+	if (a->nentries == 0)
+		return 1;
 
 	return (memcmp(a->communities, b->communities,
 	    a->nentries * sizeof(struct community)) == 0);
