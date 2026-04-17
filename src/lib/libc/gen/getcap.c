@@ -1,4 +1,4 @@
-/*	$OpenBSD: getcap.c,v 1.38 2026/03/09 12:22:44 deraadt Exp $	*/
+/*	$OpenBSD: getcap.c,v 1.39 2026/04/17 06:23:09 renaud Exp $	*/
 /*-
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -780,6 +780,10 @@ cgetnext(char **cap, char **db_array)
 lookup:
 	/* extract name from record */
 	len = strcspn(record, "|:");
+	if (len >= sizeof(nbuf)) {
+		status = -1;
+		goto done;
+	}
 	memcpy(nbuf, record, len);
 	nbuf[len] = '\0';
 
