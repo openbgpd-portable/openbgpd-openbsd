@@ -1,4 +1,4 @@
-.\" $OpenBSD: bgpd.conf.5,v 1.252 2026/01/18 16:38:02 schwarze Exp $
+.\" $OpenBSD: bgpd.conf.5,v 1.253 2026/04/22 13:51:46 claudio Exp $
 .\"
 .\" Copyright (c) 2004 Claudio Jeker <claudio@openbsd.org>
 .\" Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -16,7 +16,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd $Mdocdate: January 18 2026 $
+.Dd $Mdocdate: April 22 2026 $
 .Dt BGPD.CONF 5
 .Os
 .Sh NAME
@@ -603,7 +603,7 @@ Bind to the specific IP address before opening the TCP connection to the
 .Em rtr
 server.
 .Pp
-.Ic min-version Ar number
+.It Ic min-version Ar number
 Require a minimal RTR version of
 .Ar number .
 To ensure that ASPA records are synchronised over RTR a minimal version
