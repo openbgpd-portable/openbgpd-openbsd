@@ -1,4 +1,4 @@
-/*	$OpenBSD: session.h,v 1.194 2026/03/02 12:08:30 claudio Exp $ */
+/*	$OpenBSD: session.h,v 1.195 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -342,7 +342,7 @@ void		 session_graceful_restart(struct peer *);
 void		 session_graceful_flush(struct peer *, uint8_t, const char *);
 void		 session_mrt_dump_state(struct peer *);
 void		 session_mrt_dump_bgp_msg(struct peer *, struct ibuf *,
-		    enum msg_type, enum directions);
+		    enum msg_type, enum direction);
 int		 peer_matched(struct peer *, struct ctl_neighbor *);
 int		 imsg_ctl_parent(struct imsg *);
 int		 imsg_ctl_rde(struct imsg *);

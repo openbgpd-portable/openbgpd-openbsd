@@ -1,4 +1,4 @@
-/*	$OpenBSD: session.c,v 1.529 2026/03/19 12:44:23 claudio Exp $ */
+/*	$OpenBSD: session.c,v 1.530 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004, 2005 Henning Brauer <henning@openbsd.org>
@@ -1119,7 +1119,7 @@ session_mrt_dump_state(struct peer *p)
 
 void
 session_mrt_dump_bgp_msg(struct peer *p, struct ibuf *msg,
-     enum msg_type msgtype, enum directions dir)
+     enum msg_type msgtype, enum direction dir)
 {
 	struct mrt		*mrt;
 

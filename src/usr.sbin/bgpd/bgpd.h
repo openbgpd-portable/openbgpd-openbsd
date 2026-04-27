@@ -1,4 +1,4 @@
-/*	$OpenBSD: bgpd.h,v 1.538 2026/03/19 12:44:22 claudio Exp $ */
+/*	$OpenBSD: bgpd.h,v 1.539 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -1057,13 +1057,13 @@ struct ctl_kroute_req {
 	sa_family_t		af;
 };
 
-enum filter_actions {
+enum filter_action {
 	ACTION_NONE,
 	ACTION_ALLOW,
 	ACTION_DENY
 };
 
-enum directions {
+enum direction {
 	DIR_IN = 1,
 	DIR_OUT
 };
@@ -1277,8 +1277,8 @@ struct filter_rule {
 #define RDE_FILTER_SKIP_REMOTE_AS	2
 #define RDE_FILTER_SKIP_COUNT		3
 	struct filter_rule		*skip[RDE_FILTER_SKIP_COUNT];
-	enum filter_actions		action;
-	enum directions			dir;
+	enum filter_action		action;
+	enum direction			dir;
 	uint8_t				quick;
 };
 

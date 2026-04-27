@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.h,v 1.344 2026/03/17 09:29:29 claudio Exp $ */
+/*	$OpenBSD: rde.h,v 1.345 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Claudio Jeker <claudio@openbsd.org> and
@@ -568,10 +568,10 @@ int	rde_filter_skip_rule(struct rde_peer *, struct filter_rule *);
 int	rde_filter_equal(struct filter_head *, struct filter_head *);
 struct rde_filter_set	*rde_filterset_imsg_recv(struct imsg *);
 void	rde_filter_calc_skip_steps(struct filter_head *);
-enum filter_actions rde_filter(struct filter_head *, struct rde_peer *,
+enum filter_action rde_filter(struct filter_head *, struct rde_peer *,
 	    struct rde_peer *, struct bgpd_addr *, uint8_t,
 	    struct filterstate *);
-enum filter_actions rde_filter_out(struct rde_filter *, struct rde_peer *,
+enum filter_action rde_filter_out(struct rde_filter *, struct rde_peer *,
 	    struct rde_peer *, struct bgpd_addr *, uint8_t,
 	    struct filterstate *);
 

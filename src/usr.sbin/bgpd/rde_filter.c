@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde_filter.c,v 1.147 2026/03/17 09:29:29 claudio Exp $ */
+/*	$OpenBSD: rde_filter.c,v 1.148 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2004 Claudio Jeker <claudio@openbsd.org>
@@ -59,7 +59,7 @@ struct rde_filter_set {
 struct rde_filter_rule {
 	struct filter_match		 match;
 	struct rde_filter_set		*rde_set;
-	enum filter_actions		 action;
+	enum filter_action		 action;
 	uint8_t				 quick;
 };
 
@@ -1092,13 +1092,13 @@ rde_filter_calc_skip_steps(struct filter_head *rules)
 
 }
 
-enum filter_actions
+enum filter_action
 rde_filter(struct filter_head *rules, struct rde_peer *peer,
     struct rde_peer *from, struct bgpd_addr *prefix, uint8_t plen,
     struct filterstate *state)
 {
 	struct filter_rule	*f;
-	enum filter_actions	 action = ACTION_DENY; /* default deny */
+	enum filter_action	 action = ACTION_DENY; /* default deny */
 
 	if (state->aspath.flags & F_ATTR_PARSE_ERR)
 		/*
@@ -1151,13 +1151,13 @@ rde_filter(struct filter_head *rules, struct rde_peer *peer,
 	return (action);
 }
 
-enum filter_actions
+enum filter_action
 rde_filter_out(struct rde_filter *rf, struct rde_peer *peer,
     struct rde_peer *from, struct bgpd_addr *prefix, uint8_t plen,
     struct filterstate *state)
 {
 	struct rde_filter_rule	*f;
-	enum filter_actions	 action = ACTION_DENY; /* default deny */
+	enum filter_action	 action = ACTION_DENY; /* default deny */
 	size_t			 i;
 
 	if (state->aspath.flags & F_ATTR_PARSE_ERR)

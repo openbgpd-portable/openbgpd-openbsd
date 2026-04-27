@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.691 2026/03/19 12:44:23 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.692 2026/04/27 15:06:01 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -1980,7 +1980,7 @@ rde_update_update(struct rde_peer *peer, uint32_t path_id,
     struct filterstate *in, struct bgpd_addr *prefix, uint8_t prefixlen)
 {
 	struct filterstate	 state;
-	enum filter_actions	 action;
+	enum filter_action	 action;
 	uint32_t		 path_id_tx;
 	uint16_t		 i;
 	uint8_t			 roa_state, aspa_state;
@@ -4231,7 +4231,7 @@ rde_softreconfig_in(struct rib_entry *re, void *bula)
 	struct pt_entry		*pt;
 	struct rde_peer		*peer;
 	struct rde_aspath	*asp;
-	enum filter_actions	 action;
+	enum filter_action	 action;
 	struct bgpd_addr	 prefix;
 	uint16_t		 i;
 	uint8_t			 aspa_vstate;
@@ -4374,7 +4374,7 @@ rde_rpki_softreload(struct rib_entry *re, void *bula)
 	struct pt_entry		*pt;
 	struct rde_peer		*peer;
 	struct rde_aspath	*asp;
-	enum filter_actions	 action;
+	enum filter_action	 action;
 	struct bgpd_addr	 prefix;
 	uint8_t			 roa_vstate, aspa_vstate;
 	uint16_t		 i;
