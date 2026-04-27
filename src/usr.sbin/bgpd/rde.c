@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.692 2026/04/27 15:06:01 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.693 2026/04/27 15:24:43 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -73,11 +73,11 @@ void		 rde_dump_mrt_new(struct mrt *, pid_t, int);
 
 static void	 rde_commit_pftable(void);
 void		 rde_reload_done(void);
+static void	 rde_softreconfig_in(struct rib_entry *, void *);
 static void	 rde_softreconfig_in_done(void *, uint8_t);
+static void	 rde_softreconfig_out(struct rib_entry *, void *);
 static void	 rde_softreconfig_out_done(void *, uint8_t);
 static void	 rde_softreconfig_done(void);
-static void	 rde_softreconfig_out(struct rib_entry *, void *);
-static void	 rde_softreconfig_in(struct rib_entry *, void *);
 static void	 rde_softreconfig_sync_reeval(struct rib_entry *, void *);
 static void	 rde_softreconfig_sync_fib(struct rib_entry *, void *);
 static void	 rde_softreconfig_sync_done(void *, uint8_t);
@@ -4107,6 +4107,70 @@ rde_reload_done(void)
 }
 
 static void
+rde_softreconfig_in(struct rib_entry *re, void *bula)
+{
+	struct filterstate	 state;
+	struct rib		*rib;
+	struct prefix		*p;
+	struct pt_entry		*pt;
+	struct rde_peer		*peer;
+	struct rde_aspath	*asp;
+	enum filter_action	 action;
+	struct bgpd_addr	 prefix;
+	uint16_t		 i;
+	uint8_t			 aspa_vstate;
+
+	pt = re->prefix;
+	pt_getaddr(pt, &prefix);
+	TAILQ_FOREACH(p, &re->prefix_h, rib_l) {
+		asp = prefix_aspath(p);
+		peer = prefix_peer(p);
+
+		/* possible role change update ASPA validation state */
+		if (prefix_aspa_vstate(p) == ASPA_NEVER_KNOWN)
+			aspa_vstate = ASPA_NEVER_KNOWN;
+		else
+			aspa_vstate = rde_aspa_validity(peer, asp, pt->aid);
+		prefix_set_vstate(p, prefix_roa_vstate(p), aspa_vstate);
+
+		/* skip announced networks, they are never filtered */
+		if (asp->flags & F_PREFIX_ANNOUNCED)
+			continue;
+
+		for (i = RIB_LOC_START; i < rib_size; i++) {
+			rib = rib_byid(i);
+			if (rib == NULL)
+				continue;
+
+			if (rib->state != RECONF_RELOAD)
+				continue;
+
+			rde_filterstate_prep(&state, p);
+			action = rde_filter(rib->in_rules, peer, peer, &prefix,
+			    pt->prefixlen, &state);
+
+			if (action == ACTION_ALLOW) {
+				/* update Local-RIB */
+				prefix_update(rib, peer, p->path_id,
+				    p->path_id_tx, &state, 0,
+				    &prefix, pt->prefixlen);
+			} else if (conf->filtered_in_locrib &&
+			    i == RIB_LOC_START) {
+				prefix_update(rib, peer, p->path_id,
+				    p->path_id_tx, &state, 1,
+				    &prefix, pt->prefixlen);
+			} else {
+				/* remove from Local-RIB */
+				prefix_withdraw(rib, peer, p->path_id, &prefix,
+				    pt->prefixlen);
+			}
+
+			rde_filterstate_clean(&state);
+		}
+	}
+}
+
+static void
 rde_softreconfig_in_done(void *arg, uint8_t dummy)
 {
 	struct rde_peer	*peer;
@@ -4193,6 +4257,16 @@ rde_softreconfig_in_done(void *arg, uint8_t dummy)
 }
 
 static void
+rde_softreconfig_out(struct rib_entry *re, void *arg)
+{
+	if (prefix_best(re) == NULL)
+		/* no valid path for prefix */
+		return;
+
+	rde_generate_updates(re, NULL, 0, EVAL_RECONF);
+}
+
+static void
 rde_softreconfig_out_done(void *arg, uint8_t aid)
 {
 	struct rib	*rib = arg;
@@ -4220,80 +4294,6 @@ rde_softreconfig_done(void)
 	log_info("RDE soft reconfiguration done");
 	imsg_compose(ibuf_main, IMSG_RECONF_DONE, 0, 0,
 	    -1, NULL, 0);
-}
-
-static void
-rde_softreconfig_in(struct rib_entry *re, void *bula)
-{
-	struct filterstate	 state;
-	struct rib		*rib;
-	struct prefix		*p;
-	struct pt_entry		*pt;
-	struct rde_peer		*peer;
-	struct rde_aspath	*asp;
-	enum filter_action	 action;
-	struct bgpd_addr	 prefix;
-	uint16_t		 i;
-	uint8_t			 aspa_vstate;
-
-	pt = re->prefix;
-	pt_getaddr(pt, &prefix);
-	TAILQ_FOREACH(p, &re->prefix_h, rib_l) {
-		asp = prefix_aspath(p);
-		peer = prefix_peer(p);
-
-		/* possible role change update ASPA validation state */
-		if (prefix_aspa_vstate(p) == ASPA_NEVER_KNOWN)
-			aspa_vstate = ASPA_NEVER_KNOWN;
-		else
-			aspa_vstate = rde_aspa_validity(peer, asp, pt->aid);
-		prefix_set_vstate(p, prefix_roa_vstate(p), aspa_vstate);
-
-		/* skip announced networks, they are never filtered */
-		if (asp->flags & F_PREFIX_ANNOUNCED)
-			continue;
-
-		for (i = RIB_LOC_START; i < rib_size; i++) {
-			rib = rib_byid(i);
-			if (rib == NULL)
-				continue;
-
-			if (rib->state != RECONF_RELOAD)
-				continue;
-
-			rde_filterstate_prep(&state, p);
-			action = rde_filter(rib->in_rules, peer, peer, &prefix,
-			    pt->prefixlen, &state);
-
-			if (action == ACTION_ALLOW) {
-				/* update Local-RIB */
-				prefix_update(rib, peer, p->path_id,
-				    p->path_id_tx, &state, 0,
-				    &prefix, pt->prefixlen);
-			} else if (conf->filtered_in_locrib &&
-			    i == RIB_LOC_START) {
-				prefix_update(rib, peer, p->path_id,
-				    p->path_id_tx, &state, 1,
-				    &prefix, pt->prefixlen);
-			} else {
-				/* remove from Local-RIB */
-				prefix_withdraw(rib, peer, p->path_id, &prefix,
-				    pt->prefixlen);
-			}
-
-			rde_filterstate_clean(&state);
-		}
-	}
-}
-
-static void
-rde_softreconfig_out(struct rib_entry *re, void *arg)
-{
-	if (prefix_best(re) == NULL)
-		/* no valid path for prefix */
-		return;
-
-	rde_generate_updates(re, NULL, 0, EVAL_RECONF);
 }
 
 static void
