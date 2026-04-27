@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.693 2026/04/27 15:24:43 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.694 2026/04/27 15:52:20 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -121,7 +121,7 @@ static struct rde_aspa		*rde_aspa, *aspa_new;
 static uint8_t			 rde_aspa_generation;
 
 volatile sig_atomic_t	 rde_quit = 0;
-struct filter_head	*out_rules, *out_rules_tmp;
+struct filter_head	*rules, *rules_tmp;
 struct rde_memstats	 rdemem;
 int			 softreconfig;
 static int		 rde_eval_all;
@@ -208,16 +208,16 @@ rde_main(int debug, int verbose)
 	imsgbuf_allow_fdpass(ibuf_main);
 
 	/* initialize the RIB structures */
-	if ((out_rules = calloc(1, sizeof(struct filter_head))) == NULL)
+	if ((rules = calloc(1, sizeof(struct filter_head))) == NULL)
 		fatal(NULL);
-	TAILQ_INIT(out_rules);
+	TAILQ_INIT(rules);
 
 	pt_init();
 	attr_init();
 	path_init();
 	adjout_init();
 	communities_init();
-	peer_init(out_rules);
+	peer_init(rules);
 
 	/* make sure the default RIBs are setup */
 	rib_new("Adj-RIB-In", 0, F_RIB_NOFIB | F_RIB_NOEVALUATE);
@@ -492,7 +492,7 @@ rde_dispatch_imsg_session(struct imsgbuf *imsgbuf)
 		case IMSG_SESSION_ADD:
 			if (imsg_get_data(&imsg, &pconf, sizeof(pconf)) == -1)
 				fatalx("incorrect size of session request");
-			peer = peer_add(peerid, &pconf, out_rules);
+			peer = peer_add(peerid, &pconf, rules);
 			/* make sure rde_eval_all is on if needed. */
 			if (peer->conf.flags & PEERFLAG_EVALUATE_ALL)
 				rde_eval_all = 1;
@@ -1093,10 +1093,10 @@ rde_dispatch_imsg_parent(struct imsgbuf *imsgbuf)
 			if (imsg_recv_config(&imsg, nconf) == -1)
 				fatal("imsg_recv_config");
 
-			out_rules_tmp = calloc(1, sizeof(struct filter_head));
-			if (out_rules_tmp == NULL)
+			rules_tmp = calloc(1, sizeof(struct filter_head));
+			if (rules_tmp == NULL)
 				fatal(NULL);
-			TAILQ_INIT(out_rules_tmp);
+			TAILQ_INIT(rules_tmp);
 
 			for (rid = 0; rid < rib_size; rid++) {
 				if ((rib = rib_byid(rid)) == NULL)
@@ -1181,7 +1181,7 @@ rde_dispatch_imsg_parent(struct imsgbuf *imsgbuf)
 				}
 				TAILQ_INSERT_TAIL(nr, r, entry);
 			} else {
-				TAILQ_INSERT_TAIL(out_rules_tmp, r, entry);
+				TAILQ_INSERT_TAIL(rules_tmp, r, entry);
 			}
 			break;
 		case IMSG_RECONF_PREFIX_SET:
@@ -3912,9 +3912,9 @@ rde_reload_done(void)
 	rde_eval_all = 0;
 
 	/* Make the new outbound filter rules the active one. */
-	filterlist_free(out_rules);
-	out_rules = out_rules_tmp;
-	out_rules_tmp = NULL;
+	filterlist_free(rules);
+	rules = rules_tmp;
+	rules_tmp = NULL;
 
 	/* check if filter changed */
 	RB_FOREACH(peer, peer_tree, &peertable) {
@@ -4007,7 +4007,7 @@ rde_reload_done(void)
 		}
 
 		/* reapply outbound filters for this peer */
-		rf = peer_apply_out_filter(peer, out_rules);
+		rf = peer_apply_out_filter(peer, rules);
 
 		if (rf != peer->out_rules) {
 			char *p = log_fmt_peer(&peer->conf);
@@ -4962,8 +4962,8 @@ rde_shutdown(void)
 	peer_shutdown();
 
 	/* free filters */
-	filterlist_free(out_rules);
-	filterlist_free(out_rules_tmp);
+	filterlist_free(rules);
+	filterlist_free(rules_tmp);
 
 	/* kill the VPN configs */
 	free_l3vpns(&conf->l3vpns);
