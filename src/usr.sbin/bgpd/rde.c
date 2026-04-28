@@ -1,4 +1,4 @@
-/*	$OpenBSD: rde.c,v 1.694 2026/04/27 15:52:20 claudio Exp $ */
+/*	$OpenBSD: rde.c,v 1.695 2026/04/28 14:06:44 claudio Exp $ */
 
 /*
  * Copyright (c) 2003, 2004 Henning Brauer <henning@openbsd.org>
@@ -4003,7 +4003,6 @@ rde_reload_done(void)
 				fatal("%s: prefix_dump_new", __func__);
 			log_peer_info(&peer->conf, "flushing Adj-RIB-Out");
 			softreconfig++;	/* account for the running flush */
-			continue;
 		}
 
 		/* reapply outbound filters for this peer */
@@ -4213,7 +4212,13 @@ rde_softreconfig_in_done(void *arg, uint8_t dummy)
 	RB_FOREACH(peer, peer_tree, &peertable) {
 		uint8_t aid;
 
-		if (peer->reconf_out) {
+		if (peer->reconf_rib) {
+			/* dump the full table to neighbors that changed rib */
+			for (aid = AID_MIN; aid < AID_MAX; aid++) {
+				if (peer->capa.mp[aid])
+					peer_dump(peer, aid);
+			}
+		} else if (peer->reconf_out) {
 			if (peer->export_type == EXPORT_NONE) {
 				/* nothing to do here */
 				peer->reconf_out = 0;
@@ -4227,12 +4232,6 @@ rde_softreconfig_in_done(void *arg, uint8_t dummy)
 			} else
 				rib_byid(peer->loc_rib_id)->state =
 				    RECONF_RELOAD;
-		} else if (peer->reconf_rib) {
-			/* dump the full table to neighbors that changed rib */
-			for (aid = AID_MIN; aid < AID_MAX; aid++) {
-				if (peer->capa.mp[aid])
-					peer_dump(peer, aid);
-			}
 		}
 	}
 
