@@ -257,12 +257,15 @@ rde_prefix_match(struct filter_prefix *fp, struct bgpd_addr *prefix,
 }
 
 static int
-rde_filter_match(struct filter_match *match, struct rde_peer *peer,
-    struct rde_peer *from, struct filterstate *state,
+rde_filter_match(struct filter_match *match, uint16_t ribid,
+    struct rde_peer *peer, struct rde_peer *from, struct filterstate *state,
     struct bgpd_addr *prefix, uint8_t plen)
 {
 	struct rde_aspath *asp = &state->aspath;
 	int i;
+
+	if (match->ribid != 0 && ribid != match->ribid)
+		return (0);
 
 	if (match->ovs.is_set) {
 		if ((state->vstate & ROA_MASK) != match->ovs.validity)
@@ -358,6 +361,40 @@ rde_filter_match(struct filter_match *match, struct rde_peer *peer,
 
 	/* matched somewhen or is anymatch rule  */
 	return (1);
+}
+
+enum filter_action
+rde_filter(struct rde_filter *rf, uint16_t rib, struct rde_peer *peer,
+    struct rde_peer *from, struct bgpd_addr *prefix, uint8_t plen,
+    struct filterstate *state)
+{
+	struct rde_filter_rule	*f;
+	enum filter_action	 action = ACTION_DENY; /* default deny */
+	size_t			 i;
+
+	if (state->aspath.flags & F_ATTR_PARSE_ERR)
+		/*
+		 * don't try to filter bad updates just deny them
+		 * so they act as implicit withdraws
+		 */
+		return (ACTION_DENY);
+
+	if (prefix->aid == AID_FLOWSPECv4 || prefix->aid == AID_FLOWSPECv6)
+		return (ACTION_ALLOW);
+
+	for (i = 0; i < rf->len; i++) {
+		f = &rf->rules[i];
+		if (rde_filter_match(&f->match, rib, peer, from, state,
+		    prefix, plen)) {
+			rde_apply_set(f->rde_set, peer, from, state,
+			    prefix->aid);
+			if (f->action != ACTION_NONE)
+				action = f->action;
+			if (f->quick)
+				return (action);
+		}
+	}
+	return (action);
 }
 
 /* return true when the rule f can never match for this peer */
@@ -1020,167 +1057,3 @@ rde_filterset_stats(struct ch_stats *stats)
 
 CH_GENERATE(rde_filterset, rde_filter_set, rde_filterset_equal,
     rde_filterset_hash);
-
-/*
- * Copyright (c) 2001 Daniel Hartmeier
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *    - Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *    - Redistributions in binary form must reproduce the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer in the documentation and/or other materials provided
- *      with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
- * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
- * COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- * Effort sponsored in part by the Defense Advanced Research Projects
- * Agency (DARPA) and Air Force Research Laboratory, Air Force
- * Materiel Command, USAF, under agreement number F30602-01-2-0537.
- *
- */
-
-#define RDE_FILTER_SET_SKIP_STEPS(i)				\
-	do {							\
-		while (head[i] != cur) {			\
-			head[i]->skip[i] = cur;			\
-			head[i] = TAILQ_NEXT(head[i], entry);	\
-		}						\
-	} while (0)
-
-void
-rde_filter_calc_skip_steps(struct filter_head *rules)
-{
-	struct filter_rule *cur, *prev, *head[RDE_FILTER_SKIP_COUNT];
-	int i;
-
-	if (rules == NULL)
-		return;
-
-	cur = TAILQ_FIRST(rules);
-
-	prev = cur;
-	for (i = 0; i < RDE_FILTER_SKIP_COUNT; ++i)
-		head[i] = cur;
-	while (cur != NULL) {
-		if (cur->peer.peerid != prev->peer.peerid)
-			RDE_FILTER_SET_SKIP_STEPS(RDE_FILTER_SKIP_PEERID);
-		if (cur->peer.groupid != prev->peer.groupid)
-			RDE_FILTER_SET_SKIP_STEPS(RDE_FILTER_SKIP_GROUPID);
-		if (cur->peer.remote_as != prev->peer.remote_as)
-			RDE_FILTER_SET_SKIP_STEPS(RDE_FILTER_SKIP_REMOTE_AS);
-		prev = cur;
-		cur = TAILQ_NEXT(cur, entry);
-	}
-	for (i = 0; i < RDE_FILTER_SKIP_COUNT; ++i)
-		RDE_FILTER_SET_SKIP_STEPS(i);
-
-}
-
-enum filter_action
-rde_filter(struct filter_head *rules, struct rde_peer *peer,
-    struct rde_peer *from, struct bgpd_addr *prefix, uint8_t plen,
-    struct filterstate *state)
-{
-	struct filter_rule	*f;
-	enum filter_action	 action = ACTION_DENY; /* default deny */
-
-	if (state->aspath.flags & F_ATTR_PARSE_ERR)
-		/*
-		 * don't try to filter bad updates just deny them
-		 * so they act as implicit withdraws
-		 */
-		return (ACTION_DENY);
-
-	if (rules == NULL)
-		return (action);
-
-	if (prefix->aid == AID_FLOWSPECv4 || prefix->aid == AID_FLOWSPECv6)
-		return (ACTION_ALLOW);
-
-	f = TAILQ_FIRST(rules);
-	while (f != NULL) {
-		if (f->peer.peerid && f->peer.peerid != peer->conf.id) {
-			f = f->skip[RDE_FILTER_SKIP_PEERID];
-			continue;
-		}
-		if (f->peer.groupid && f->peer.groupid != peer->conf.groupid) {
-			f = f->skip[RDE_FILTER_SKIP_GROUPID];
-			continue;
-		}
-		if (f->peer.remote_as &&
-		    f->peer.remote_as != peer->conf.remote_as) {
-			f = f->skip[RDE_FILTER_SKIP_REMOTE_AS];
-			continue;
-		}
-		if (f->peer.ebgp && !peer->conf.ebgp) {
-			f = TAILQ_NEXT(f, entry);
-			continue;
-		}
-		if (f->peer.ibgp && peer->conf.ebgp) {
-			f = TAILQ_NEXT(f, entry);
-			continue;
-		}
-
-		if (rde_filter_match(&f->match, peer, from, state,
-		    prefix, plen)) {
-			rde_apply_set(f->rde_set, peer, from, state,
-			    prefix->aid);
-			if (f->action != ACTION_NONE)
-				action = f->action;
-			if (f->quick)
-				return (action);
-		}
-		f = TAILQ_NEXT(f, entry);
-	}
-	return (action);
-}
-
-enum filter_action
-rde_filter_out(struct rde_filter *rf, struct rde_peer *peer,
-    struct rde_peer *from, struct bgpd_addr *prefix, uint8_t plen,
-    struct filterstate *state)
-{
-	struct rde_filter_rule	*f;
-	enum filter_action	 action = ACTION_DENY; /* default deny */
-	size_t			 i;
-
-	if (state->aspath.flags & F_ATTR_PARSE_ERR)
-		/*
-		 * don't try to filter bad updates just deny them
-		 * so they act as implicit withdraws
-		 */
-		return (ACTION_DENY);
-
-	if (prefix->aid == AID_FLOWSPECv4 || prefix->aid == AID_FLOWSPECv6)
-		return (ACTION_ALLOW);
-
-	for (i = 0; i < rf->len; i++) {
-		f = &rf->rules[i];
-		if (rde_filter_match(&f->match, peer, from, state,
-		    prefix, plen)) {
-			rde_apply_set(f->rde_set, peer, from, state,
-			    prefix->aid);
-			if (f->action != ACTION_NONE)
-				action = f->action;
-			if (f->quick)
-				return (action);
-		}
-	}
-	return (action);
-}

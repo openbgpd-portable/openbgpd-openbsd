@@ -177,7 +177,7 @@ up_process_prefix(struct rde_peer *peer, struct prefix *new,
 
 	rde_filterstate_prep(&state, new);
 	pt_getaddr(new->pt, &addr);
-	if (rde_filter_out(peer->out_rules, peer, prefix_peer(new), &addr,
+	if (rde_filter(peer->out_rules, 0, peer, prefix_peer(new), &addr,
 	    new->pt->prefixlen, &state) == ACTION_DENY) {
 		rde_filterstate_clean(&state);
 		return UP_FILTERED;
@@ -435,7 +435,7 @@ up_generate_default(struct rde_peer *peer, uint8_t aid)
 	addr.aid = aid;
 
 	/* outbound filter as usual */
-	if (rde_filter_out(peer->out_rules, peer, peerself, &addr, 0,
+	if (rde_filter(peer->out_rules, 0, peer, peerself, &addr, 0,
 	    &state) == ACTION_DENY) {
 		rde_filterstate_clean(&state);
 		return;

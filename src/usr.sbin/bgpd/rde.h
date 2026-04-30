@@ -59,8 +59,6 @@ struct rib_entry {
 struct rib {
 	struct rib_tree		tree;
 	char			name[PEER_DESCR_LEN];
-	struct filter_head	*in_rules;
-	struct filter_head	*in_rules_tmp;
 	u_int			rtableid;
 	u_int			rtableid_tmp;
 	enum reconf_action	state, fibstate;
@@ -98,6 +96,7 @@ struct rde_peer {
 	struct pend_prefix_queue	 withdraws[AID_MAX];
 	struct pend_attr_hash		 pend_attrs;
 	struct pend_prefix_hash		 pend_prefixes;
+	struct rde_filter		*in_rules;
 	struct rde_filter		*out_rules;
 	struct ibufqueue		*ibufq;
 	struct rib_queue		 rib_pq_head;
@@ -114,6 +113,7 @@ struct rde_peer {
 	uint16_t			 mrt_idx;
 	uint8_t				 recv_eor;	/* bitfield per AID */
 	uint8_t				 sent_eor;	/* bitfield per AID */
+	uint8_t				 reconf_in;	/* in filter changed */
 	uint8_t				 reconf_out;	/* out filter changed */
 	uint8_t				 reconf_rib;	/* rib changed */
 	uint8_t				 throttled;
@@ -420,6 +420,8 @@ struct rde_peer *peer_match(struct ctl_neighbor *, uint32_t);
 struct rde_peer	*peer_add(uint32_t, struct peer_config *, struct filter_head *);
 struct rde_filter	*peer_apply_out_filter(struct rde_peer *,
 			    struct filter_head *);
+struct rde_filter	*peer_apply_in_filter(struct rde_peer *,
+			    struct filter_head *);
 
 void		 rde_generate_updates(struct rib_entry *, struct prefix *,
 		    uint32_t, enum eval_mode);
@@ -567,11 +569,7 @@ uint64_t	rde_filterset_calc_hash(const struct rde_filter_set *);
 int	rde_filter_skip_rule(struct rde_peer *, struct filter_rule *);
 int	rde_filter_equal(struct filter_head *, struct filter_head *);
 struct rde_filter_set	*rde_filterset_imsg_recv(struct imsg *);
-void	rde_filter_calc_skip_steps(struct filter_head *);
-enum filter_action rde_filter(struct filter_head *, struct rde_peer *,
-	    struct rde_peer *, struct bgpd_addr *, uint8_t,
-	    struct filterstate *);
-enum filter_action rde_filter_out(struct rde_filter *, struct rde_peer *,
+enum filter_action rde_filter(struct rde_filter *, uint16_t, struct rde_peer *,
 	    struct rde_peer *, struct bgpd_addr *, uint8_t,
 	    struct filterstate *);
 

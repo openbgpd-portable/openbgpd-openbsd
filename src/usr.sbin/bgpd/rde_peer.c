@@ -184,6 +184,8 @@ peer_add(uint32_t id, struct peer_config *p_conf, struct filter_head *rules)
 	adjout_peer_init(peer);
 	if (peer_apply_out_filter(peer, rules) != NULL)
 		fatalx("peer add: peer_apply_out_filter failed");
+	if (peer_apply_in_filter(peer, rules) != NULL)
+		fatalx("peer add: peer_apply_in_filter failed");
 
 	/*
 	 * Assign an even random unique transmit path id.
@@ -209,16 +211,17 @@ peer_add(uint32_t id, struct peer_config *p_conf, struct filter_head *rules)
 	return peer;
 }
 
-struct rde_filter *
-peer_apply_out_filter(struct rde_peer *peer, struct filter_head *rules)
+static struct rde_filter *
+peer_apply_filter(struct rde_peer *peer, struct filter_head *rules,
+    enum direction dir)
 {
-	struct rde_filter *old, *new;
+	struct rde_filter *new;
 	struct filter_rule *fr;
 	size_t count = 0;
 
-	old = peer->out_rules;
-
 	TAILQ_FOREACH(fr, rules, entry) {
+		if (fr->dir != dir)
+			continue;
 		if (rde_filter_skip_rule(peer, fr))
 			continue;
 		count++;
@@ -227,12 +230,37 @@ peer_apply_out_filter(struct rde_peer *peer, struct filter_head *rules)
 
 	count = 0;
 	TAILQ_FOREACH(fr, rules, entry) {
+		if (fr->dir != dir)
+			continue;
 		if (rde_filter_skip_rule(peer, fr))
 			continue;
 		rde_filter_fill(new, count++, fr);
 	}
 
+	return new;
+}
+
+struct rde_filter *
+peer_apply_out_filter(struct rde_peer *peer, struct filter_head *rules)
+{
+	struct rde_filter *old, *new;
+
+	old = peer->out_rules;
+	new = peer_apply_filter(peer, rules, DIR_OUT);
 	peer->out_rules = rde_filter_getcache(new);
+
+	return old;
+}
+
+struct rde_filter *
+peer_apply_in_filter(struct rde_peer *peer, struct filter_head *rules)
+{
+	struct rde_filter *old, *new;
+
+	old = peer->in_rules;
+	new = peer_apply_filter(peer, rules, DIR_IN);
+	peer->in_rules = rde_filter_getcache(new);
+
 	return old;
 }
 
@@ -537,6 +565,7 @@ peer_delete(struct rde_peer *peer)
 	if (peer->state != PEER_DOWN)
 		peer_down(peer);
 
+	rde_filter_unref(peer->in_rules);
 	rde_filter_unref(peer->out_rules);
 	adjout_peer_free(peer);
 

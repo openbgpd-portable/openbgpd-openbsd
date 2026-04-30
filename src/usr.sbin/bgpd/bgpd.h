@@ -1263,20 +1263,17 @@ struct filter_match {
 	int				maxcomm;
 	int				maxextcomm;
 	int				maxlargecomm;
+	uint16_t			ribid;
 };
 
 struct filter_rule {
 	TAILQ_ENTRY(filter_rule)	entry;
+	struct rde_filter_set		*rde_set;
+	struct filter_set_head		set;
+
 	char				rib[PEER_DESCR_LEN];
 	struct filter_peers		peer;
 	struct filter_match		match;
-	struct filter_set_head		set;
-	struct rde_filter_set		*rde_set;
-#define RDE_FILTER_SKIP_PEERID		0
-#define RDE_FILTER_SKIP_GROUPID		1
-#define RDE_FILTER_SKIP_REMOTE_AS	2
-#define RDE_FILTER_SKIP_COUNT		3
-	struct filter_rule		*skip[RDE_FILTER_SKIP_COUNT];
 	enum filter_action		action;
 	enum direction			dir;
 	uint8_t				quick;

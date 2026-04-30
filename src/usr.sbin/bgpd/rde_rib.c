@@ -125,11 +125,6 @@ rib_new(char *name, u_int rtableid, uint16_t flags)
 	new->flags = flags;
 	new->rtableid = rtableid;
 
-	new->in_rules = calloc(1, sizeof(struct filter_head));
-	if (new->in_rules == NULL)
-		fatal(NULL);
-	TAILQ_INIT(new->in_rules);
-
 	ribs[id] = new;
 
 	log_debug("%s: %s -> %u", __func__, name, id);
@@ -227,8 +222,6 @@ rib_free(struct rib *rib)
 	}
 	if (rib->id <= RIB_LOC_START)
 		return; /* never remove the default ribs */
-	filterlist_free(rib->in_rules_tmp);
-	filterlist_free(rib->in_rules);
 	ribs[rib->id] = NULL;
 	free(rib);
 }
@@ -253,8 +246,6 @@ rib_shutdown(void)
 		rib = rib_byid(id);
 		if (rib == NULL)
 			continue;
-		filterlist_free(rib->in_rules_tmp);
-		filterlist_free(rib->in_rules);
 		ribs[id] = NULL;
 		free(rib);
 	}

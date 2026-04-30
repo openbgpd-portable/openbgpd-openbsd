@@ -911,7 +911,6 @@ rde_dispatch_imsg_parent(struct imsgbuf *imsgbuf)
 	struct roa		 roa;
 	char			 name[SET_NAME_LEN];
 	struct imsgbuf		*i;
-	struct filter_head	*nr;
 	struct filter_rule	*r;
 	struct rib		*rib;
 	struct rde_prefixset	*ps;
@@ -1161,28 +1160,19 @@ rde_dispatch_imsg_parent(struct imsgbuf *imsgbuf)
 				fatalx("IMSG_RECONF_FILTER: bad filter_set");
 			r->rde_set = parent_set;
 			parent_set = NULL;
-			if ((rib = rib_byid(rib_find(r->rib))) == NULL) {
-				log_warnx("IMSG_RECONF_FILTER: filter rule "
-				    "for nonexistent rib %s", r->rib);
-				rde_filterset_unref(r->rde_set);
-				free(r);
-				break;
-			}
-			r->peer.ribid = rib->id;
 			if (r->dir == DIR_IN) {
-				nr = rib->in_rules_tmp;
-				if (nr == NULL) {
-					nr = calloc(1,
-					    sizeof(struct filter_head));
-					if (nr == NULL)
-						fatal(NULL);
-					TAILQ_INIT(nr);
-					rib->in_rules_tmp = nr;
+				rib = rib_byid(rib_find(r->rib));
+				if (rib == NULL) {
+					log_warnx("IMSG_RECONF_FILTER: "
+					    "filter rule for nonexistent "
+					    "rib %s", r->rib);
+					rde_filterset_unref(r->rde_set);
+					free(r);
+					break;
 				}
-				TAILQ_INSERT_TAIL(nr, r, entry);
-			} else {
-				TAILQ_INSERT_TAIL(rules_tmp, r, entry);
+				r->match.ribid = rib->id;
 			}
+			TAILQ_INSERT_TAIL(rules_tmp, r, entry);
 			break;
 		case IMSG_RECONF_PREFIX_SET:
 		case IMSG_RECONF_ORIGIN_SET:
@@ -2017,8 +2007,8 @@ rde_update_update(struct rde_peer *peer, uint32_t path_id,
 			continue;
 		rde_filterstate_copy(&state, in);
 		/* input filter */
-		action = rde_filter(rib->in_rules, peer, peer, prefix,
-		    prefixlen, &state);
+		action = rde_filter(peer->in_rules, i, peer, peer,
+		    prefix, prefixlen, &state);
 
 		if (action == ACTION_ALLOW) {
 			rde_update_log("update", i, peer,
@@ -3855,7 +3845,6 @@ void
 rde_reload_done(void)
 {
 	struct rde_peer		*peer;
-	struct filter_head	*fh;
 	struct rde_filter	*rf;
 	struct rde_prefixset_head prefixsets_old;
 	struct rde_prefixset_head originsets_old;
@@ -3911,7 +3900,7 @@ rde_reload_done(void)
 	/* make sure that rde_eval_all is correctly set after a config change */
 	rde_eval_all = 0;
 
-	/* Make the new outbound filter rules the active one. */
+	/* Make the new filter rules the active one. */
 	filterlist_free(rules);
 	rules = rules_tmp;
 	rules_tmp = NULL;
@@ -3920,6 +3909,7 @@ rde_reload_done(void)
 	RB_FOREACH(peer, peer_tree, &peertable) {
 		if (peer->conf.id == 0)	/* ignore peerself */
 			continue;
+		peer->reconf_in = 0;
 		peer->reconf_out = 0;
 		peer->reconf_rib = 0;
 
@@ -4007,12 +3997,22 @@ rde_reload_done(void)
 
 		/* reapply outbound filters for this peer */
 		rf = peer_apply_out_filter(peer, rules);
-
 		if (rf != peer->out_rules) {
 			char *p = log_fmt_peer(&peer->conf);
 			log_debug("out filter change: reloading peer %s", p);
 			free(p);
 			peer->reconf_out = 1;
+		}
+		rde_filter_unref(rf);
+
+		/* reapply inbound filters for this peer */
+		rf = peer_apply_in_filter(peer, rules);
+		if (rf != peer->in_rules) {
+			char *p = log_fmt_peer(&peer->conf);
+			log_debug("in filter change: reloading peer %s", p);
+			free(p);
+			peer->reconf_in = 1;
+			reload++;
 		}
 		rde_filter_unref(rf);
 	}
@@ -4022,12 +4022,6 @@ rde_reload_done(void)
 		struct rib *rib = rib_byid(rid);
 		if (rib == NULL)
 			continue;
-		rde_filter_calc_skip_steps(rib->in_rules_tmp);
-
-		/* flip rules, make new active */
-		fh = rib->in_rules;
-		rib->in_rules = rib->in_rules_tmp;
-		rib->in_rules_tmp = fh;
 
 		switch (rib->state) {
 		case RECONF_DELETE:
@@ -4065,14 +4059,10 @@ rde_reload_done(void)
 			rib->state = RECONF_KEEP;
 			/* FALLTHROUGH */
 		case RECONF_KEEP:
-			if (!(force_locrib && rid == RIB_LOC_START) &&
-			    rde_filter_equal(rib->in_rules, rib->in_rules_tmp))
-				/* rib is in sync */
-				break;
-			log_debug("filter change: reloading RIB %s",
-			    rib->name);
-			rib->state = RECONF_RELOAD;
-			reload++;
+			if (force_locrib && rid == RIB_LOC_START) {
+				rib->state = RECONF_RELOAD;
+				reload++;
+			}
 			break;
 		case RECONF_REINIT:
 			/* new rib */
@@ -4082,8 +4072,6 @@ rde_reload_done(void)
 		case RECONF_NONE:
 			break;
 		}
-		filterlist_free(rib->in_rules_tmp);
-		rib->in_rules_tmp = NULL;
 	}
 
 	/* old filters removed, free all sets */
@@ -4145,8 +4133,8 @@ rde_softreconfig_in(struct rib_entry *re, void *bula)
 				continue;
 
 			rde_filterstate_prep(&state, p);
-			action = rde_filter(rib->in_rules, peer, peer, &prefix,
-			    pt->prefixlen, &state);
+			action = rde_filter(peer->in_rules, i, peer, peer,
+			    &prefix, pt->prefixlen, &state);
 
 			if (action == ACTION_ALLOW) {
 				/* update Local-RIB */
@@ -4415,8 +4403,8 @@ rde_rpki_softreload(struct rib_entry *re, void *bula)
 				continue;
 
 			rde_filterstate_prep(&state, p);
-			action = rde_filter(rib->in_rules, peer, peer, &prefix,
-			    pt->prefixlen, &state);
+			action = rde_filter(peer->in_rules, i, peer, peer,
+			    &prefix, pt->prefixlen, &state);
 
 			if (action == ACTION_ALLOW) {
 				/* update Local-RIB */
